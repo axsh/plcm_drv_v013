@@ -8,9 +8,13 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
+#include <linux/device.h>
+#include <linux/cdev.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include "plcm_ioctl.h"
+
+
 
 #if defined(OLDKERNEL)
 #define printk //printk issue in 2.4.22
@@ -23,14 +27,31 @@
 #endif
 
 /*
+ * Constants
+ */
+#define DRIVER_NAME "plcm_drv"
+static const unsigned int MINOR_BASE = 0;
+static const unsigned int MINOR_NUM  = 2;
+
+/*
  * Driver Version Control
  */
 static unsigned char Driver_Version[] = "0.1.2"; // 2014-08-20
 
 /*
- * Device Major Number
+ * Device Major/Minor Number
  */
-#define PLCM_MAJOR 248
+static unsigned int device_major;
+
+/*
+ * Device Class
+ */
+static struct class *device_class;
+
+/*
+ * Character Device Struct
+ */
+static struct cdev device_cdev;
 
 /*
  * The DISPLAY_CAREFUL_MODE is just usable when the mode of parallel 
@@ -563,20 +584,48 @@ static const struct file_operations plcm_fops = {
 
 int plcm_init(void)
 {
+	int alloc_ret = 0;
+	int cdev_err = 0;
+	dev_t dev;
+
 	/*
 	 * Register the character device
 	 */
-	if(register_chrdev(PLCM_MAJOR, "plcm_drv", &plcm_fops))
-	{
-		printk("plcm : unable to get major %d\n", PLCM_MAJOR);
-		return -EIO;
+	alloc_ret = alloc_chrdev_region(&dev, MINOR_BASE, MINOR_NUM, DRIVER_NAME);
+	if (alloc_ret != 0) {
+		printk("plcm : alloc_chrdev_region returned %d\n", alloc_ret);
+		return -1;
 	}
+
+	device_major = MAJOR(dev);
+	dev = MKDEV(device_major, MINOR_BASE);
+
+	cdev_init(&device_cdev, &plcm_fops);
+	device_cdev.owner = THIS_MODULE;
+
+	cdev_err = cdev_add(&device_cdev, dev, MINOR_NUM);
+	if (cdev_err != 0) {
+		printk("plcm : cdev_add returned %d\n", alloc_ret);
+		unregister_chrdev_region(dev, MINOR_NUM);
+		return -1;
+	}
+
+	device_class = class_create(THIS_MODULE, "plcm");
+	if (IS_ERR(device_class)) {
+		printk("plcm : class_create failed\n");
+		cdev_del(&device_cdev);
+		unregister_chrdev_region(dev, MINOR_NUM);
+		return -1;
+	}
+
+	device_create(device_class, NULL, MKDEV(device_major, MINOR_BASE), NULL, "plcm_drv");
+
 	printk("Parallel LCM Driver Version %s is loaded\n", Driver_Version);
 	LCM_Init();
 	if(DataPort == 0)
 	{
 		printk("plcm_drv: unable to access any LPTx\n");
-		unregister_chrdev(PLCM_MAJOR, "plcm_drv");
+		unregister_chrdev(device_major, "plcm_drv");
 		return -EIO;
 	}
 #if 0
@@ -590,8 +639,18 @@ int plcm_init(void)
  */
 void plcm_exit(void)
 {
+
+	dev_t dev = MKDEV(device_major, MINOR_BASE);
+
 	/* Unregister the device */
-	unregister_chrdev(PLCM_MAJOR, "plcm_drv");
+	device_destroy(device_class, MKDEV(device_major, MINOR_BASE));
+
+	class_destroy(device_class);
+
+	cdev_del(&device_cdev);
+
+	unregister_chrdev_region(dev, MINOR_NUM);
+
 	/* If there's an error, report it */
 	printk("Parallel LCM Driver Version %s is unloaded\n", Driver_Version);
 }

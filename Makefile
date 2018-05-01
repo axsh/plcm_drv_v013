@@ -51,9 +51,6 @@ ifeq ($(wildcard lcd-menu),)
 	gcc -O2 info_disp.c menu_objs.c -o lcd-menu  
 endif
 	rmmod plcm_drv
-ifeq ($(wildcard /dev/plcm_drv),) 
-	mknod /dev/plcm_drv c 248 0
-endif	
 	insmod plcm_drv.ko	
 	install -m 755 lcd-menu /usr/bin/.
 clean:
