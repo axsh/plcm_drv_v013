@@ -33,6 +33,27 @@ default:
 	gcc -O2 plcm_cursor_char.c -o plcm_cursor_char
 	gcc -g info_disp.c menu_objs.c -o lcd-menu  
 
+module:
+ifeq ($(KVER3),3)
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+endif
+ifeq ($(KVER),2.6)
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+endif
+ifeq ($(KVER),2.4)
+	$(CC) $(MODCFLAGS) -c plcm_drv.c
+endif
+
+ifeq ($(wildcard lcd-menu),)
+	gcc -O2 ppdev_test.c -o ppdev_test
+	gcc -O2 plcm_test.c -o plcm_test
+	gcc -O2 plcm_cursor_char.c -o plcm_cursor_char
+	gcc -O2 info_disp.c menu_objs.c -o lcd-menu
+endif
+
+marquee:
+	gcc -O2 marquee.c -o marquee
+
 boot:
 ifeq ($(KVER3),3)
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
@@ -48,7 +69,7 @@ ifeq ($(wildcard lcd-menu),)
 	gcc -O2 ppdev_test.c -o ppdev_test
 	gcc -O2 plcm_test.c -o plcm_test
 	gcc -O2 plcm_cursor_char.c -o plcm_cursor_char
-	gcc -O2 info_disp.c menu_objs.c -o lcd-menu  
+	gcc -O2 info_disp.c menu_objs.c -o lcd-menu
 endif
 	rmmod plcm_drv
 	insmod plcm_drv.ko	
@@ -58,6 +79,7 @@ clean:
 	rm -f plcm_cursor_char
 	rm -f ppdev_test
 	rm -f lcd-menu 
+	rm -f marquee
 	
 ifeq ($(KVER3),3)
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
